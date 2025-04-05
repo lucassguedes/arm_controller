@@ -6,6 +6,20 @@ import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision 
 
+# Angle calculation function
+def calculate_angle(a, b, c):
+    """Calculate angle between three points (in degrees)."""
+    a = np.array(a)  # First point
+    b = np.array(b)  # Mid point (joint)
+    c = np.array(c)  # End point
+
+    ba = a - b
+    bc = c - b
+
+    cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
+    angle = np.arccos(np.clip(cosine_angle, -1.0, 1.0))
+    return np.degrees(angle)
+
 
 def draw_landmarks_on_image(rgb_image, detection_result):
 	pose_landmarks_list = detection_result.pose_landmarks
@@ -60,33 +74,63 @@ def main():
 	while cap.isOpened():
 		ret, frame = cap.read()
 		if not ret:
-			print("Ignoring empty camera frame.")
 			continue
 
-		# Convert the BGR image to RGB before processing
+		# Convert to RGB
 		rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-		# To improve performance
 		rgb_frame.flags.writeable = False
 
-		# Make detection
+		# Pose estimation
 		results = pose.process(rgb_frame)
-
-		# Draw the pose annotation on the image
 		rgb_frame.flags.writeable = True
 		frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
 
 		if results.pose_landmarks:
+			landmarks = results.pose_landmarks.landmark
+
+			# Get image dimensions
+			h, w, _ = frame.shape
+
+			# Helper to convert landmark to pixel
+			def get_coords(index):
+				lm = landmarks[index]
+				return int(lm.x * w), int(lm.y * h)
+
+			# Left arm: shoulder, elbow, wrist
+			left_shoulder = get_coords(mp_pose.PoseLandmark.LEFT_SHOULDER.value)
+			left_elbow = get_coords(mp_pose.PoseLandmark.LEFT_ELBOW.value)
+			left_wrist = get_coords(mp_pose.PoseLandmark.LEFT_WRIST.value)
+
+			left_angle = calculate_angle(left_shoulder, left_elbow, left_wrist)
+
+			# Draw left angle
+			cv2.putText(frame, str(int(left_angle)),
+						(left_elbow[0] + 10, left_elbow[1] - 10),
+						cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 255), 2, cv2.LINE_AA)
+
+			# Right arm: shoulder, elbow, wrist
+			right_shoulder = get_coords(mp_pose.PoseLandmark.RIGHT_SHOULDER.value)
+			right_elbow = get_coords(mp_pose.PoseLandmark.RIGHT_ELBOW.value)
+			right_wrist = get_coords(mp_pose.PoseLandmark.RIGHT_WRIST.value)
+
+			right_angle = calculate_angle(right_shoulder, right_elbow, right_wrist)
+
+			# Draw right angle
+			cv2.putText(frame, str(int(right_angle)),
+						(right_elbow[0] + 10, right_elbow[1] - 10),
+						cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 255), 2, cv2.LINE_AA)
+
+			# Draw pose landmarks
 			mp_drawing.draw_landmarks(
 				frame,
 				results.pose_landmarks,
 				mp_pose.POSE_CONNECTIONS,
-				mp_drawing.DrawingSpec(color=(245, 66, 230), thickness=2, circle_radius=2),
+				mp_drawing.DrawingSpec(color=(245, 117, 66), thickness=2, circle_radius=2),
 				mp_drawing.DrawingSpec(color=(66, 245, 96), thickness=2, circle_radius=2),
 			)
 
-		# Show the output
-		cv2.imshow('MediaPipe Pose', frame)
+		# Show the frame
+		cv2.imshow('Pose Estimation with Angles', frame)
 
 		if cv2.waitKey(1) & 0xFF == ord('q'):
 			break
