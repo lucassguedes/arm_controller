@@ -5,6 +5,8 @@ import cv2
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision 
+import serial
+
 
 # Angle calculation function
 def calculate_angle(a, b, c):
@@ -42,7 +44,7 @@ def draw_landmarks_on_image(rgb_image, detection_result):
 			solutions.drawing_styles.get_default_pose_landmarks_style()
 		)
 
-		return annotated_image;
+		return annotated_image
 
 
 def pose_from_image():
@@ -65,6 +67,8 @@ def pose_from_image():
 	cv2.destroyAllWindows() # It destroys the image showing the window.
 
 def main():
+	# Open the serial port
+	ser = serial.Serial(port='COM5', baudrate=9600, timeout=1)
 	cap = cv2.VideoCapture(0)
 
 	mp_pose = mp.solutions.pose
@@ -115,6 +119,17 @@ def main():
 
 			right_angle = calculate_angle(right_shoulder, right_elbow, right_wrist)
 
+
+			if(right_angle > 90):
+				right_angle = 0.0
+
+			right_angle = int(right_angle)
+
+			ser.write(f"{int(right_angle)}\n".encode('ascii'))
+			print(right_angle)
+
+
+
 			# Draw right angle
 			cv2.putText(frame, str(int(right_angle)),
 						(right_elbow[0] + 10, right_elbow[1] - 10),
@@ -134,6 +149,7 @@ def main():
 
 		if cv2.waitKey(1) & 0xFF == ord('q'):
 			break
+	ser.close()
 
 
 if __name__ == '__main__':
